@@ -19,7 +19,7 @@ class ThemeClassifier():
         self.model_name = 'facebook/bart-large-mnli'
         self.device = 0 if torch.cuda.is_available() else 'cpu'
         self.theme_list = theme_list
-        self.theme_classifier = self.load_model(self.deivce)
+        self.theme_classifier = self.load_model(self.device)
     
     def load_model(self, device):
         theme_classifier = pipeline(
@@ -55,6 +55,11 @@ class ThemeClassifier():
         return themes 
     
     def get_themes(self, dataset_path, save_path = None):
+        #Read save output if it exists
+        if save_path is not None and os.path.exists(save_path):
+            df = pd.read_csv(save_path)
+            return df
+        
         df = load_subtitles_dataset(dataset_path)
         
         output_themes = df['script'].apply(self.get_themes_inference)
@@ -65,3 +70,5 @@ class ThemeClassifier():
         
         if save_path is not None:
             df.to_csv(save_path, index = False)
+            
+        return df
