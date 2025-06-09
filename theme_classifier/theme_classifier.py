@@ -31,9 +31,12 @@ class ThemeClassifier():
         return theme_classifier
     
     def get_themes_inference(self, script):
+        #Split text into sentences
         script_sentences = sent_tokenize(script)
         sentence_batch_size = 20
         script_batches = []
+        
+        #Go through every 20 sentences to improve runtime
         for index in range(0, len(script_sentences), sentence_batch_size):
             sentence = ' '.join(script_sentences[index:index + sentence_batch_size])
             script_batches.append(sentence)
