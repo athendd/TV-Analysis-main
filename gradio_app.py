@@ -1,6 +1,10 @@
 import gradio as gr
 from theme_classifier import ThemeClassifier
 from character_network import NamedEntityRecognizer, CharacterNetworkGenerator
+from text_classification import JutsuClassifier
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
 def get_themes(theme_list_str, subtitles_path, save_path):
     theme_list = theme_list_str.split(',')
@@ -39,6 +43,13 @@ def get_character_network(subtitiles_path, ner_path):
     
     return html
     
+def classify_text(text_classification_model, text_classification_data_path, text_to_classify):
+    jutsu_classifier = JutsuClassifier(model_path = text_classification_model, data_path = text_classification_data_path,
+                                       huggingface_token = os.getenv('huggingface_token'))
+    
+    output = jutsu_classifier.classify_justsu(text_to_classify)
+    
+    return output
 
 def main():
     with gr.Blocks() as iface:
@@ -56,6 +67,20 @@ def main():
                         get_themes_button.click(get_themes, inputs = [theme_list, subtitles_path, save_path], outputs = [plot])
     
         #Character Network area   
+        with gr.Row():
+            with gr.Column():
+                gr.HTML("<h1>Text Classification with LLMs</h1>")
+                with gr.Row():
+                    with gr.Column():
+                        text_classification_output = gr.Textbox(label = 'Text Classification Output')
+                    with gr.Column():
+                        text_classification_model = gr.Textbox(label = 'Model Path')
+                        text_classification_data_path = gr.Textbox(label = 'Data Path')
+                        text_to_classify = gr.Textbox(label = 'Text Input')
+                        classify_text_button = gr.Button('Classify Text (Jutsu)')
+                        classify_text_button.click(classify_text, inputs = [text_classification_model, text_classification_data_path, text_to_classify], outputs = [text_classification_output])
+                        
+        #Text classification with LLMs  
         with gr.Row():
             with gr.Column():
                 gr.HTML("<h1>Character Network(NERs and Graphs)</h1>")
