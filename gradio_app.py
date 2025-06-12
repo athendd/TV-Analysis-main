@@ -47,7 +47,7 @@ def classify_text(text_classification_model, text_classification_data_path, text
     jutsu_classifier = JutsuClassifier(model_path = text_classification_model, data_path = text_classification_data_path,
                                        huggingface_token = os.getenv('huggingface_token'))
     
-    output = jutsu_classifier.classify_justsu(text_to_classify)
+    output = jutsu_classifier.classify_jutsu(text_to_classify)
     
     return output
 

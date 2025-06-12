@@ -13,7 +13,7 @@ import gc
 class JutsuClassifier():
     def __init__(
         self, model_path, data_path = None, text_column_name = 'text', label_column_name = 'jutsu', 
-        model_name = 'distilbert/distilbert-base-uncased', 
+        model_name = 'distilbert-base-uncased', 
         test_size = 0.2, num_labels = 3, huggingface_token = None):
         
         self.model_path = model_path
@@ -62,7 +62,7 @@ class JutsuClassifier():
         
         training_args = TrainingArguments(output_dir = self.model_path, learning_rate=2e-4, per_device_train_batch_size = 8,
                                           per_device_eval_batch_size = 8, num_train_epochs = 5, weight_decay = 0.01,
-                                          evaluation_strategy = 'epoch', logging_strategy = 'epoch', 
+                                          eval_strategy = 'epoch', logging_strategy = 'epoch', 
                                           push_to_hub = True)
         
         trainer = CustomTrainer(model = model, args = training_args, train_dataset = train_data,
@@ -81,7 +81,6 @@ class JutsuClassifier():
         
         if self.device == 'cuda':
             torch.cuda.empty_cache()
-          
           
     """
     Removes unncessary jutsus from the jutsu type and only keeps 
@@ -128,13 +127,13 @@ class JutsuClassifier():
         #Tokenize the dataset
         tokenized_train = train_dataset.map(lambda examples: self.preprocess_function(self.tokenizer, examples), batched = True)
         tokenized_test = test_dataset.map(lambda examples: self.preprocess_function(self.tokenizer, examples), batched = True)
-
+        
+        return tokenized_train, tokenized_test
                 
     def load_tokenizer(self):
         #If model exists on huggingface then load it
         if huggingface_hub.repo_exists(self.model_path):
             tokenizer = AutoTokenizer.from_pretrained(self.model_path)
-            
         else:
             tokenizer = AutoTokenizer.from_pretrained(self.model_name)
             
