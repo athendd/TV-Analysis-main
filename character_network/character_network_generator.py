@@ -19,7 +19,7 @@ class CharacterNetworkGenerator:
                 previous_entities_in_window.append(list(sentence))
                 previous_entities_in_window = previous_entities_in_window[-windows:]
 
-                # Flatten 2D List into 1D List
+                #Flatten 2D List into 1D List
                 previous_entities_flattened = sum(previous_entities_in_window, [])
 
                 for entity in sentence:
