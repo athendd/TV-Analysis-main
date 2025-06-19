@@ -9,7 +9,7 @@ import sys
 import pathlib
 folder_path = pathlib.Path(__file__).parent.resolve()
 sys.path.append(os.path.join(folder_path,'../'))
-from utils import load_subtitles_dataset
+from utils import load_subtitles_dataset, load_hunterxhunter_subtitles_dataset
 nltk.download('punkt')
 nltk.download('punkt_tab')
 
@@ -33,7 +33,7 @@ class ThemeClassifier():
     def get_themes_inference(self, script):
         #Split text into sentences
         script_sentences = sent_tokenize(script)
-        sentence_batch_size = 20
+        sentence_batch_size = 25
         script_batches = []
         
         #Go through every 20 sentences to improve runtime
@@ -63,7 +63,7 @@ class ThemeClassifier():
             df = pd.read_csv(save_path)
             return df
         
-        df = load_subtitles_dataset(dataset_path)
+        df = load_hunterxhunter_subtitles_dataset(dataset_path)
         
         output_themes = df['script'].apply(self.get_themes_inference)
         
