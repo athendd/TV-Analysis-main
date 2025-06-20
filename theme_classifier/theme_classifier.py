@@ -9,7 +9,7 @@ import sys
 import pathlib
 folder_path = pathlib.Path(__file__).parent.resolve()
 sys.path.append(os.path.join(folder_path,'../'))
-from utils import load_subtitles_dataset, load_hunterxhunter_subtitles_dataset
+from utils import load_hunterxhunter_single_arc, load_hunterxhunter_series
 nltk.download('punkt')
 nltk.download('punkt_tab')
 
@@ -36,7 +36,7 @@ class ThemeClassifier():
         sentence_batch_size = 25
         script_batches = []
         
-        #Go through every 20 sentences to improve runtime
+        #Go through every 25 sentences to improve runtime
         for index in range(0, len(script_sentences), sentence_batch_size):
             sentence = ' '.join(script_sentences[index:index + sentence_batch_size])
             script_batches.append(sentence)
@@ -59,11 +59,16 @@ class ThemeClassifier():
     
     def get_themes(self, dataset_path, save_path = None):
         #Read save output if it exists
-        if save_path is not None and os.path.exists(save_path):
+        if os.path.exists(save_path):
             df = pd.read_csv(save_path)
-            return df
+            return df, False
+                
+        dataset_name = dataset_path.split('\\')[-1]
         
-        df = load_hunterxhunter_subtitles_dataset(dataset_path)
+        if dataset_name == 'Entire Series':
+            df = load_hunterxhunter_series(dataset_path)
+        else:
+            df = load_hunterxhunter_single_arc(dataset_path)
         
         output_themes = df['script'].apply(self.get_themes_inference)
         
@@ -74,4 +79,4 @@ class ThemeClassifier():
         if save_path is not None:
             df.to_csv(save_path, index = False)
             
-        return df
+        return df, True

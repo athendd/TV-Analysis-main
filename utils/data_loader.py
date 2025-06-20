@@ -26,7 +26,35 @@ def load_subtitles_dataset(dataset_path):
     df = pd.DataFrame.from_dict({"episode":episode_num, "script":scripts })
     return df
 
-def load_hunterxhunter_subtitles_dataset(dataset_path):
+def load_hunterxhunter_arc_subtitles(directory, directory_path, scripts, episode_num):
+    subtitles_path = glob(directory_path + '/*.txt')
+                    
+    for path in subtitles_path:
+        with open(path, 'r', encoding = 'utf-8') as file:
+            lines = file.readlines()
+        
+        #Remove the first 8 lines from file since its just narration     
+        if directory == 'Hunter Exam Arc':
+            lines = lines[8:]  
+        
+        script = ' '.join(lines)
+        episode = int(path.split('\\')[-1].split(' ')[-1].split('.')[0])
+
+        scripts.append(script)
+        episode_num.append(episode)
+        
+def load_hunterxhunter_single_arc(dataset_path):
+    scripts = []
+    episode_num = []
+    directory = dataset_path.split("\\")[-1]
+    
+    load_hunterxhunter_arc_subtitles(directory, dataset_path, scripts, episode_num)
+    
+    df = pd.DataFrame.from_dict({"episode":episode_num, "script":scripts })
+    
+    return df
+
+def load_hunterxhunter_series(dataset_path):
     scripts = []
     episode_num = []
     directories = []
@@ -38,21 +66,9 @@ def load_hunterxhunter_subtitles_dataset(dataset_path):
                 
     for directory in directories:
         directory_path = dataset_path + f'/{directory}'
-        subtitles_path = glob(directory_path + '/*.txt')
-                    
-        for path in subtitles_path:
-            with open(path, 'r', encoding = 'utf-8') as file:
-                lines = file.readlines()
-            
-            #Remove the first 8 lines from file since its just narration     
-            if directory == 'Hunter Exam Arc':
-                lines = lines[8:]  
-            
-            script = ' '.join(lines)
-            episode = int(path.split('\\')[-1].split(' ')[-1].split('.')[0])
-            
-            scripts.append(script)
-            episode_num.append(episode)
         
+        load_hunterxhunter_arc_subtitles(directory, directory_path, scripts, episode_num)
+    
     df = pd.DataFrame.from_dict({"episode":episode_num, "script":scripts })
+    
     return df

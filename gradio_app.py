@@ -7,24 +7,42 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-def get_themes(theme_list_str, subtitles_path, save_path):
+SUBTITLE_PATHS = {
+    'Entire Series': r'Data\HunterxHunterSubtitles',
+    'Hunter Exam Arc': r'Data\HunterxHunterSubtitles\Hunter Exam Arc',
+    'Zoldyck Family Arc': r'Data\HunterxHunterSubtitles\Zoldyck Family Arc',
+    'Heavens Arena Arc': r'Data\HunterxHunterSubtitles\Heavens Arena Arc',
+    'Yorknew City Arc': r'Data\HunterxHunterSubtitles\Yorknew City Arc',
+    'Greed Island Arc': r'Data\HunterxHunterSubtitles\Greed Island Arc',
+    'Chimera Ant Arc': r'Data\HunterxHunterSubtitles\Chimera Ant Arc',
+    '13th Hunter Chairman Election Arc': r'Data\HunterxHunterSubtitles\13th Hunter Chairman Election Arc',
+}
+
+def get_themes(theme_list_str, selected_arc, save_path):
+    subtitles_path = SUBTITLE_PATHS.get(selected_arc, None)
+    if not subtitles_path or not os.path.exists(subtitles_path):
+        return gr.HTML("<p style='color:red;'>Selected Arc's subtitles path not found. Please check configuration.</p>")
+    
     theme_list = theme_list_str.split(',')
     theme_classifier = ThemeClassifier(theme_list)
-    output_df = theme_classifier.get_themes(subtitles_path, save_path)
+    output_df, new_file = theme_classifier.get_themes(subtitles_path, save_path)
     
-    theme_list = [theme for theme in theme_list if theme != 'dialogue']
-    
-    #Remove dialogue column from output_df
-    output_df = output_df[theme_list]
-    
-    output_df = output_df[theme_list].sum().reset_index()
+    if new_file:
+        #Remove episode and script columns from output_df
+        output_df = output_df[theme_list]
+        output_df = output_df[theme_list].sum().reset_index()
+    else:
+        output_df = output_df.drop(columns = ['episode', 'script'])
+        columns_list = list(output_df.columns)
+        output_df = output_df[columns_list].sum().reset_index()
+                
     output_df.columns = ['Theme', 'Score']
     
     output_chart = gr.BarPlot(
         output_df,
         x = 'Theme',
         y = 'Score',
-        title = 'Series Themes',
+        title = f'Classified Themes',
         tooltip = ['Theme', 'Score'],
         vertical = False,
         width = 500,
@@ -70,10 +88,14 @@ def main():
                         plot = gr.BarPlot()
                     with gr.Column():
                         theme_list = gr.Textbox(label = "Themes")
-                        subtitles_path = gr.Textbox(label = "Subtitles or Script Path")
+                        dropdown_menu = gr.Dropdown(
+                            choices = list(SUBTITLE_PATHS.keys()), label = 'Arc', 
+                            allow_custom_value = False, filterable = False, value = 'Entire Series'
+                        )
+                        #subtitles_path = gr.Textbox(label = "Subtitles or Script Path")
                         save_path = gr.Textbox(label = "Save Path")
                         get_themes_button = gr.Button("Get Themes")
-                        get_themes_button.click(get_themes, inputs = [theme_list, subtitles_path, save_path], outputs = [plot])
+                        get_themes_button.click(get_themes, inputs = [theme_list, dropdown_menu, save_path], outputs = [plot])
     
         #Character Network area   
         with gr.Row():
