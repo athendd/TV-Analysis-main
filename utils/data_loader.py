@@ -43,6 +43,18 @@ def load_hunterxhunter_arc_subtitles(directory, directory_path, scripts, episode
         scripts.append(script)
         episode_num.append(episode)
         
+def load_hunterxhunter_single_episode(dataset_path):
+    episode_num = int(dataset_path.split("\\")[-1].split(" ")[-1].split(".")[0])
+    lines = []
+    
+    with open(dataset_path, 'r', encoding = 'utf-8') as file:
+        lines = file.readlines()
+        
+        if episode_num >= 1 and episode_num < 22:
+            lines = lines[8:]
+    
+    return lines
+        
 def load_hunterxhunter_single_arc(dataset_path):
     scripts = []
     episode_num = []
