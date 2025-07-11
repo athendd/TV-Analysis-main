@@ -53,7 +53,7 @@ def get_themes(theme_list_str, selected_arc, save_path):
     return output_chart
 
 def get_summary(episode_path, episode_save_path):
-    episode_summarizer = EpisodeSummarizer(0.7)
+    episode_summarizer = EpisodeSummarizer()
     
     episode_summary = episode_summarizer.get_episode_summary(episode_path, episode_save_path)
     
