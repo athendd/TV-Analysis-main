@@ -19,13 +19,32 @@ SUBTITLE_PATHS = {
     '13th Hunter Chairman Election Arc': r'Data\HunterxHunterSubtitles\13th Hunter Chairman Election Arc',
 }
 
+SUMMARIZER_OPTIONS = {
+     'Concise Summary of Episode':(
+        """
+        Below is the full script from an episode of Hunter x Hunter. Write a single, well-structured paragraph that summarizes the entire episode.
+        Focus on the key plot developments, character actions, and emotional turning points. Make sure the summary flows smoothly from beginning to end and captures the episode’s core story.
+        Do not include unnecessary details, quotes, or dialogue formatting. Keep it concise and readable.
+        {text}
+        """
+        ),
+    'Bullet List of Events': (
+        """
+        Below is the full script form an episode of Hunter x Hunter. Write multiple bullet points on key events that occurred during the episode in chronological
+        order. Focus on the key characters, actions, and settings of each event. Do not include unnecessary details, quotes, or dialogue formatting. Keep it concise and readable.
+        {text} 
+        """
+        )
+}
+
 def get_themes(theme_list_str, selected_arc, save_path):
     subtitles_path = SUBTITLE_PATHS.get(selected_arc, None)
     if not subtitles_path or not os.path.exists(subtitles_path):
         return gr.HTML("<p style='color:red;'>Selected Arc's subtitles path not found. Please check configuration.</p>")
-    
+        
     theme_list = theme_list_str.split(',')
     theme_classifier = ThemeClassifier(theme_list)
+    
     output_df, new_file = theme_classifier.get_themes(subtitles_path, save_path)
     
     if new_file:
@@ -52,16 +71,21 @@ def get_themes(theme_list_str, selected_arc, save_path):
     
     return output_chart
 
-def get_summary(episode_path, episode_save_path):
-    episode_summarizer = EpisodeSummarizer()
+def get_summary(selected_output, episode_path, episode_save_path):
+    prompt = SUMMARIZER_OPTIONS.get(selected_output)
+    
+    episode_summarizer = EpisodeSummarizer(prompt)
     
     episode_summary = episode_summarizer.get_episode_summary(episode_path, episode_save_path)
     
     return episode_summary
 
-def get_character_network(subtitiles_path, ner_path):
+def get_character_network(selected_arc, ner_path):
+    subtitles_path = SUBTITLE_PATHS.get(selected_arc)
     ner = NamedEntityRecognizer()
-    ner_df = ner.get_ners(subtitiles_path, ner_path)
+    ner_df = ner.get_ners(subtitles_path, ner_path)
+    
+    print(ner_df)
     
     character_network_generator = CharacterNetworkGenerator()
     
@@ -112,12 +136,16 @@ def main():
                     with gr.Column():
                         episode_summarizer_output = gr.Textbox(label = "Episode Summarizer Output")
                     with gr.Column():
+                        summarizer_dropdown_menu = gr.Dropdown(
+                            choices = list(SUMMARIZER_OPTIONS.keys()), label = 'Type of Output', 
+                            allow_custom_value = False, filterable = False, value = 'Concise Summary of Episode'
+                        )
                         episode_to_summarize_path = gr.Textbox(label = 'Episode Path')
                         episode_summarization_save_path = gr.Textbox(label = 'Save Path')
                         get_summary_button = gr.Button('Get Summary')
-                        get_summary_button.click(get_summary, inputs = [episode_to_summarize_path, episode_summarization_save_path], outputs = [episode_summarizer_output])
+                        get_summary_button.click(get_summary, inputs = [summarizer_dropdown_menu, episode_to_summarize_path, episode_summarization_save_path], outputs = [episode_summarizer_output])
     
-        #Character Network area   
+        #Text Classification area
         with gr.Row():
             with gr.Column():
                 gr.HTML("<h1>Text Classification with LLMs</h1>")
@@ -126,12 +154,12 @@ def main():
                         text_classification_output = gr.Textbox(label = 'Text Classification Output')
                     with gr.Column():
                         text_classification_model = gr.Textbox(label = 'Model Path')
-                        text_classification_data_path = gr.Textbox(label = 'Data Path')
+                        text_classifcation_data_path = gr.Textbox(label='Data Path')
                         text_to_classify = gr.Textbox(label = 'Text Input')
                         classify_text_button = gr.Button('Classify Text (Jutsu)')
-                        classify_text_button.click(classify_text, inputs = [text_classification_model, text_classification_data_path, text_to_classify], outputs = [text_classification_output])
+                        classify_text_button.click(classify_text, inputs = [text_classification_model, text_to_classify], outputs = [text_classification_output])
                         
-        #Text classification with LLMs  
+        #Character Network Area
         with gr.Row():
             with gr.Column():
                 gr.HTML("<h1>Character Network(NERs and Graphs)</h1>")
@@ -139,10 +167,13 @@ def main():
                     with gr.Column():
                         network_html = gr.HTML()
                     with gr.Column():
-                        subtitles_path = gr.Textbox(label = "Subtitles or Script Path")
+                        cna_dropdown_menu = gr.Dropdown(
+                            choices = list(SUBTITLE_PATHS.keys()), label = 'Arc', 
+                            allow_custom_value = False, filterable = False, value = 'Entire Series'
+                        )
                         ner_path = gr.Textbox(label = "NERs Save Path")
                         get_network_graph_button = gr.Button("Get Character Network")
-                        get_network_graph_button.click(get_character_network, inputs = [subtitles_path, ner_path], outputs = [network_html])
+                        get_network_graph_button.click(get_character_network, inputs = [cna_dropdown_menu, ner_path], outputs = [network_html])
                         
         #Character chatbot section
         with gr.Row():
