@@ -1,1 +1,3 @@
-from .data_loader import load_subtitles_dataset
+from .data_loader import load_hunterxhunter_single_arc
+from .data_loader import load_hunterxhunter_series
+from .data_loader import load_hunterxhunter_single_episode
