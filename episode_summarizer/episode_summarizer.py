@@ -7,7 +7,8 @@ import os
 
 class EpisodeSummarizer:
     
-    def __init__(self):
+    def __init__(self, prompt_template):
+        self.prompt_template = prompt_template
         model_id = "mistralai/Mistral-7B-Instruct-v0.3"
         tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
         model = AutoModelForCausalLM.from_pretrained(
@@ -28,27 +29,7 @@ class EpisodeSummarizer:
         self.llm = HuggingFacePipeline(pipeline=hf_pipeline)
 
     def summarize_chunk(self, chunk):
-        """
-        template = (
-            
-            Summarize this full Hunter x Hunter episode script into a paragraph long summary. Have the summary focus on major plot points with smooth transitions between each.
-            This summary should give a good understanding of what happened in the episode from start to finish. Ensure that summary is complete and doesn't exceed the max token output.
-            {text}
-            
-        )
-        """
-        
-        template = (
-        """
-        Below is the full script from an episode of Hunter x Hunter. Write a single, well-structured paragraph that summarizes the entire episode.
-        Focus on the key plot developments, character actions, and emotional turning points. Make sure the summary flows smoothly from beginning to end and captures the episode’s core story.
-        Do not include unnecessary details, quotes, or dialogue formatting. Keep it concise and readable.
-        {text}
-        """
-)
-
-
-        prompt = PromptTemplate(template=template, input_variables=["text"])
+        prompt = PromptTemplate(template=self.prompt_template, input_variables=["text"])
         chain = prompt | self.llm
         
         return chain.invoke({"text": chunk})
