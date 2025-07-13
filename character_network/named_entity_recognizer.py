@@ -7,7 +7,7 @@ from ast import literal_eval
 import pathlib
 folder_path = pathlib.Path().parent.resolve()
 sys.path.append(os.path.join(folder_path, '../'))
-from utils import load_subtitles_dataset
+from utils import load_hunterxhunter_series, load_hunterxhunter_single_arc
 
 class NamedEntityRecognizer:
     def __init__(self):
@@ -27,13 +27,10 @@ class NamedEntityRecognizer:
             ners = set()
             for entity in doc.ents:
                 if entity.label_ == "PERSON":
-                    full_name = entity.text
                     first_name = entity.text.split(' ')[0]
                     first_name = first_name.strip()
                     ners.add(first_name)
             ner_output.append(ners)
-            
-        print('yes')
         
         return ner_output
     
@@ -41,10 +38,16 @@ class NamedEntityRecognizer:
         if save_path is not None and os.path.exists(save_path):
             df = pd.read_csv(save_path)
             df['ners'] = df['ners'].apply(lambda x: literal_eval(x) if isinstance(x, str) else x)
-            return df
             
-        df = load_subtitles_dataset(dataset_path)
+            return df
         
+        dataset_name = dataset_path.split('\\')[-1]
+        
+        if dataset_name == 'HunterxHunterSubtitles':
+            df = load_hunterxhunter_series(dataset_path)
+        else:
+            df = load_hunterxhunter_single_arc(dataset_path)
+                    
         df['ners'] = df['script'].apply(self.get_ners_inference)
         
         if save_path is not None:
