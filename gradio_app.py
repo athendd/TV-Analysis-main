@@ -2,7 +2,7 @@ import gradio as gr
 from theme_classifier import ThemeClassifier
 from episode_summarizer import EpisodeSummarizer
 from character_network import NamedEntityRecognizer, CharacterNetworkGenerator
-from text_classification import JutsuClassifier
+from text_classification import NenClassifier
 from character_chatbot import CharacterChatBot
 import os
 from dotenv import load_dotenv
@@ -30,7 +30,7 @@ SUMMARIZER_OPTIONS = {
         ),
     'Bullet List of Events': (
         """
-        Below is the full script form an episode of Hunter x Hunter. Write multiple bullet points on key events that occurred during the episode in chronological
+        Below is the full script fromm an episode of Hunter x Hunter. Write multiple bullet points on key events that occurred during the episode in chronological
         order. Focus on the key characters, actions, and settings of each event. Do not include unnecessary details, quotes, or dialogue formatting. Keep it concise and readable.
         {text} 
         """
@@ -84,9 +84,7 @@ def get_character_network(selected_arc, ner_path):
     subtitles_path = SUBTITLE_PATHS.get(selected_arc)
     ner = NamedEntityRecognizer()
     ner_df = ner.get_ners(subtitles_path, ner_path)
-    
-    print(ner_df)
-    
+        
     character_network_generator = CharacterNetworkGenerator()
     
     relationship_df = character_network_generator.generate_character_network(ner_df)
@@ -95,10 +93,10 @@ def get_character_network(selected_arc, ner_path):
     return html
     
 def classify_text(text_classification_model, text_classification_data_path, text_to_classify):
-    jutsu_classifier = JutsuClassifier(model_path = text_classification_model, data_path = text_classification_data_path,
+    nen_classifier =  NenClassifier(model_path = text_classification_model, data_path = text_classification_data_path,
                                        huggingface_token = os.getenv('huggingface_token'))
     
-    output = jutsu_classifier.classify_jutsu(text_to_classify)
+    output = nen_classifier.classify_nen(text_to_classify)
     
     return output
 
@@ -156,8 +154,8 @@ def main():
                         text_classification_model = gr.Textbox(label = 'Model Path')
                         text_classifcation_data_path = gr.Textbox(label='Data Path')
                         text_to_classify = gr.Textbox(label = 'Text Input')
-                        classify_text_button = gr.Button('Classify Text (Jutsu)')
-                        classify_text_button.click(classify_text, inputs = [text_classification_model, text_to_classify], outputs = [text_classification_output])
+                        classify_text_button = gr.Button('Classify Text (Nen)')
+                        classify_text_button.click(classify_text, inputs = [text_classification_model, text_classifcation_data_path, text_to_classify], outputs = [text_classification_output])
                         
         #Character Network Area
         with gr.Row():
