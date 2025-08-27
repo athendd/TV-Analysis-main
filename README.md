@@ -1,13 +1,13 @@
-# 🪄 Hunter x Hunter AI Analysis & Character Chatbot  
+# Hunter x Hunter AI Analysis & Character Chatbot  
 
 An **AI-powered toolkit** for exploring the world of *Hunter x Hunter* through NLP and LLMs.  
 This project combines **zero-shot classifiers, custom multi-label models, knowledge-grounded chatbots, and retrieval-augmented summarization** to analyze themes, characters, and episodes in ways that fans and researchers alike can use.  
 
 ---
 
-## 📌 Features  
+## Features  
 
-### 🎭 1. Theme Classifier (Zero-Shot)  
+### 1. Theme Classifier (Zero-Shot)  
 - Uses **zero-shot text classification** to label subtitles with themes (e.g., *friendship*, *betrayal*, *sacrifice*).  
 - Works at two levels:  
   - **Entire Series**: classify themes across all subtitles.  
@@ -17,7 +17,7 @@ This project combines **zero-shot classifiers, custom multi-label models, knowle
 
 ---
 
-### 🔗 2. Character Network (NER + Graphs)  
+### 2. Character Network (NER + Graphs)  
 - Extracts **character mentions** from subtitles with NER.  
 - Builds **co-occurrence graphs**:  
   - Nodes = characters  
@@ -28,7 +28,7 @@ This project combines **zero-shot classifiers, custom multi-label models, knowle
 
 ---
 
-### ⚡ 3. Nen Classifier (Custom Multi-Label Model)  
+### 3. Nen Classifier (Custom Multi-Label Model)  
 - Custom **MultiLabelClassifier** that assigns one or more Nen types:  
   - Enhancement, Conjuration, Manipulation, Emission, Transmutation, Specialization.  
 - Supports **hybrid abilities** (e.g., Kurapika’s *Holy Chain* → Enhancement + Conjuration).  
@@ -38,7 +38,7 @@ This project combines **zero-shot classifiers, custom multi-label models, knowle
 
 ---
 
-### 📺 4. Episode Summarizer (LLM-Powered)  
+### 4. Episode Summarizer (LLM-Powered)  
 - Built with **Mistral-7B-Instruct** for abstractive summarization.  
 - Takes subtitle text and produces:  
   1. **Concise Summary**: one polished paragraph.  
@@ -47,7 +47,7 @@ This project combines **zero-shot classifiers, custom multi-label models, knowle
 
 ---
 
-### 🤖 5. Character Chatbot (RAG + Persona Conditioning)  
+### 5. Character Chatbot (RAG + Persona Conditioning)  
 - Interactive **character chatbots** for **Gon Freecss, Killua Zoldyck, and Kurapika**.  
 - **Data Sources**:  
   - Wiki-scraped: background, abilities, affiliations, equipment, arc plots.  
