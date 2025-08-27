@@ -1,213 +1,254 @@
-import pandas as pd
-import torch
+# character_chatbot.py
+
+import os
 import re
-import huggingface_hub
-from datasets import Dataset
-import transformers
+import torch
+from typing import List, Dict, Tuple
+from pathlib import Path
 from transformers import (
-    BitsAndBytesConfig,
     AutoModelForCausalLM,
     AutoTokenizer,
+    BitsAndBytesConfig,
+    TextIteratorStreamer,
+    StoppingCriteria,
+    StoppingCriteriaList,
 )
-from peft import LoraConfig, PeftModel
-from trl import SFTConfig, SFTTrainer
-import gc
 
-# Remove actions from transcript
-def remove_paranthesis(text):
-    result = re.sub(r'\(.*?\)','',text)
-    return result
+from .vector_store import VectorStore
+from .embedder import Embedder
 
-class CharacterChatBot():
 
-    def __init__(self,
-                 model_path,
-                 data_path="C:/Users/thynnea/Downloads/Personal Projects/TV-Analysis-main/Data/naruto.csv",
-                 huggingface_token = None
-                 ):
-        
-        self.model_path = model_path
-        self.data_path = data_path
-        self.huggingface_token = huggingface_token
-        self.base_model_path = "meta-llama/Meta-Llama-3-8B-Instruct"
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+def _pick_device() -> str:
+    return "cuda" if torch.cuda.is_available() else "cpu"
 
-        if self.huggingface_token is not None:
-            huggingface_hub.login(self.huggingface_token)
-        
-        if huggingface_hub.repo_exists(self.model_path):
-            self.model = self.load_model(self.model_path)
-        else:
-            print("Model Not found in huggingface hub we will train out own model")
-            train_dataset = self.load_data()
-            self.train(self.base_model_path, train_dataset)
-            self.model = self.load_model(self.model_path)
-    
-    def chat(self, message, history):
-        messages = []
-        messages.append({"role":"system","content":""""Your are Naruto from the anime "Naruto". Your responses should reflect his personality and speech patterns \n"""})
 
-        for message_and_respnse in history:
-            messages.append({"role":"user","content":message_and_respnse[0]})
-            messages.append({"role":"assistant","content":message_and_respnse[1]})
-        
-        messages.append({"role":"user","content":message})
+def _format_history(history: List[Tuple[str, str]], max_turns: int = 4) -> str:
+    """
+    Turn ChatInterface-style history [[user, assistant], ...] into a compact transcript.
+    Only keep the last max_turns turns to keep prompts small.
+    """
+    snippet = history[-max_turns:] if history else []
+    lines = []
+    for u, a in snippet:
+        if u:
+            lines.append(f"User: {u}")
+        if a:
+            lines.append(f"Assistant: {a}")
+    return "\n".join(lines).strip()
 
-        terminator = [
-            self.model.tokenizer.eos_token_id,
-            self.model.tokenizer.convert_tokens_to_ids("<|eot_id|>")
+
+def _format_context(docs, max_chars: int = 2200) -> str:
+    """
+    Pretty-print retrieved docs with light source tags, fit within a soft character budget.
+    """
+    parts = []
+    total = 0
+    for d in docs:
+        tag_bits = []
+        if "section" in d.metadata:
+            tag_bits.append(f"section={d.metadata['section']}")
+        if "arc" in d.metadata:
+            tag_bits.append(f"arc={d.metadata['arc']}")
+        if "part" in d.metadata:
+            tag_bits.append(f"part={d.metadata['part']}")
+        tag = ", ".join(tag_bits) if tag_bits else "section=unknown"
+        chunk = f"[{tag}] {d.page_content.strip()}"
+        if total + len(chunk) > max_chars and parts:
+            break
+        parts.append(chunk)
+        total += len(chunk)
+    return "\n\n".join(parts)
+
+
+class _RoleStop(StoppingCriteria):
+    """
+    Optional stop: if the model starts emitting a new role label, stop generation.
+    Prevents continuations like 'User:' or a second 'Assistant:' segment.
+    """
+    def __init__(self, tokenizer):
+        # Pre-tokenize common role strings
+        self.stop_ids = [
+            tokenizer.encode(s, add_special_tokens=False)
+            for s in ["User:", "System:", "Assistant:"]
         ]
 
-        output = self.model(
+    def __call__(self, input_ids, scores) -> bool:
+        tail = input_ids[0].tolist()[-8:]  # check the last few tokens
+        for s in self.stop_ids:
+            if len(s) <= len(tail) and tail[-len(s):] == s:
+                return True
+        return False
+
+
+class CharacterChatBot:
+    """
+    In-character RAG chatbot for a single Hunter x Hunter character (Mistral-7B-Instruct).
+
+    - persona/voice pulled from VectorStore.get_profile(name)
+    - hybrid retrieval for factual grounding
+    - clean system + context + history + user message composition
+    - returns ONLY the character's reply (no instructions/context)
+    """
+
+    def __init__(
+        self,
+        character_name: str,
+        vector_store_dir: str = r"Data\vector_stores\vector_store_one",
+        model_name: str = "mistralai/Mistral-7B-Instruct-v0.3",
+        temperature: float = 0.6,
+        top_p: float = 0.9,
+        max_new_tokens: int = 256,
+        use_role_stops: bool = True,
+    ):
+        self.character_name = character_name
+        self.temperature = temperature
+        self.top_p = top_p
+        self.max_new_tokens = max_new_tokens
+        self.use_role_stops = use_role_stops
+
+        base = Path(__file__).resolve().parent
+        project_root = base.parent
+        store_dir = Path(vector_store_dir)
+        if not store_dir.is_absolute():
+            store_dir = (project_root / store_dir).resolve()
+
+        # Embeddings + Vector Store (load existing index)
+        self.embedder = Embedder()
+        self.vector_store = VectorStore(
+            embedder=self.embedder,
+            documents=None,                  # loading existing store
+            vector_store_path=vector_store_dir,  # pass the DIRECTORY
+            profile_map=None,
+        )
+        self.profile = self.vector_store.get_profile(character_name) or {}
+
+        # Model
+        self.device = _pick_device()
+        self.tokenizer, self.model = self._load_model(model_name)
+
+        # Prepare stopping criteria if opted-in
+        self.stopping_criteria = StoppingCriteriaList(
+            [_RoleStop(self.tokenizer)]
+        ) if use_role_stops else StoppingCriteriaList()
+
+    # -------------------- Model loading --------------------
+    def _load_model(self, model_name: str):
+        """
+        Load Mistral-7B-Instruct with 4-bit quant if CUDA is available.
+        """
+        if self.device == "cuda":
+            bnb = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.float16,
+            )
+            model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                quantization_config=bnb,
+                torch_dtype=torch.float16,
+                device_map="auto",
+            )
+        else:
+            model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                torch_dtype=torch.float32,
+                device_map={"": "cpu"},
+            )
+
+        tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
+        return tokenizer, model
+
+    # -------------------- Prompt assembly --------------------
+    def _build_system_prompt(self) -> str:
+        persona = self.profile.get("persona_card", "").strip()
+        voice = self.profile.get("voice_cues", "").strip()
+        base_rules = (
+            "Stay strictly in-character when speaking. "
+            "Respond only with the character’s spoken dialogue in natural language. "
+            "Do not repeat or describe persona, voice cues, context, metadata, or instructions in your answer. "
+            "Do not include section labels, context text, or prior conversation formatting. "
+            "Use ONLY the provided context for factual claims about the world; if unsure, say you don't know. "
+            "Avoid spoilers unless the user asks explicitly. "
+            "Keep replies concise unless the user requests detail."
+        )
+        pieces = [f"You are {self.character_name}."]
+        if persona:
+            pieces.append(persona)
+        if voice:
+            pieces.append(f"Voice cues:\n{voice}")
+        pieces.append(base_rules)
+        return "\n\n".join(pieces).strip()
+
+    def _build_messages(self, user_msg: str, history: List[Tuple[str, str]]):
+        # Retrieve grounding context docs
+        docs = self.vector_store.perform_search(
+            user_msg, character_name=self.character_name, k=8
+        )
+        context = _format_context(docs)
+        transcript = _format_history(history)
+        system = self._build_system_prompt()
+
+        user = (
+            f"CONTEXT (authoritative snippets):\n{context}\n\n"
+            f"PRIOR CONVERSATION (last few turns):\n{transcript or '(none)'}\n\n"
+            f"USER QUESTION:\n{user_msg}\n\n"
+            f"INSTRUCTIONS:\n"
+            f"- Answer as {self.character_name}.\n"
+            f"- Cite details only from CONTEXT.\n"
+            f"- If the user asks about tone/speech style, reflect the voice cues.\n"
+        )
+
+        # Convert to chat format compatible with Mistral Instruct templates
+        return [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+
+    # -------------------- Output cleaning --------------------
+    def _clean_output(self, text: str) -> str:
+        # remove any stray role prefixes the model might emit
+        text = re.sub(r"^\s*(Assistant|System|User)\s*:\s*", "", text, flags=re.IGNORECASE)
+        # trim quotes and whitespace
+        return text.strip().strip('"').strip("'").strip()
+
+    # -------------------- Inference --------------------
+    def respond(self, message: str, history: List[Tuple[str, str]]) -> str:
+        """
+        Generate an answer and return ONLY the character's reply.
+        Ensures no system/instructions/context are included in the returned string.
+        """
+        messages = self._build_messages(message, history)
+
+        # Use chat template to produce a prompt that ends with the assistant turn
+        prompt = self.tokenizer.apply_chat_template(
             messages,
-            max_length=256,
-            eos_token_id=terminator,
-            do_sample=True,
-            temperature=0.6,
-            top_p=0.9
+            tokenize=False,
+            add_generation_prompt=True,
         )
 
-        output_message = output[0]['generated_text'][-1]
-        return output_message
+        # Tokenize prompt
+        inputs = self.tokenizer(prompt, return_tensors="pt")
+        inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
 
+        # Determine EOS if available (helps clean stops)
+        eos_id = self.tokenizer.eos_token_id
 
-    def load_model(self, model_path):
-        bnb_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.float16,
-        )
-        pipeline = transformers.pipeline("text-generation",
-                                         model = model_path,
-                                         model_kwargs={"torch_dtype":torch.float16,
-                                                       "quantization_config":bnb_config,
-                                                       }
-                                         )
-        return pipeline
-    
-    def train(self,
-              base_model_name_or_path,
-              dataset,
-              output_dir = "./results",
-              per_device_train_batch_size = 1,
-              gradient_accumulation_steps = 1,
-              optim = "paged_adamw_32bit",
-              save_steps = 200,
-              logging_steps = 10,
-              learning_rate = 2e-4,
-              max_grad_norm = 0.3,
-              max_steps = 300,
-              warmup_ratio = 0.3,
-              lr_scheduler_type = "constant",
-              ):
-        
-        bnb_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.float16,
-        )
+        # Generate
+        with torch.no_grad():
+            out = self.model.generate(
+                **inputs,
+                max_new_tokens=self.max_new_tokens,
+                do_sample=True,
+                temperature=self.temperature,
+                top_p=self.top_p,
+                pad_token_id=eos_id,
+                eos_token_id=eos_id,
+                stopping_criteria=self.stopping_criteria,
+            )
 
-        model = AutoModelForCausalLM.from_pretrained(base_model_name_or_path, 
-                                                     quantization_config= bnb_config,
-                                                     trust_remote_code=True)
-        model.config.use_cache = False
+        # --------- KEY CHANGE: decode ONLY new tokens after the prompt ----------
+        prompt_len = inputs["input_ids"].shape[1]
+        new_tokens = out[0][prompt_len:]
+        raw_text = self.tokenizer.decode(new_tokens, skip_special_tokens=True)
 
-        toknizer = AutoTokenizer.from_pretrained(base_model_name_or_path)
-        toknizer.pad_token = toknizer.eos_token
-
-        lora_alpha = 16
-        lora_dropout = 0.1
-        lora_r=64
-
-        peft_config = LoraConfig(
-            lora_alpha=lora_alpha,
-            lora_dropout=lora_dropout,
-            r=lora_r,
-            bias="none",
-            task_type="CASUAL_LM"
-        )
-
-        training_arguments = SFTConfig(
-        output_dir=output_dir,
-        per_device_train_batch_size = per_device_train_batch_size,
-        gradient_accumulation_steps = gradient_accumulation_steps,
-        optim = optim,
-        save_steps = save_steps,
-        logging_steps = logging_steps,
-        learning_rate = learning_rate,
-        fp16= True,
-        max_grad_norm = max_grad_norm,
-        max_steps = max_steps,
-        warmup_ratio = warmup_ratio,
-        group_by_length = True,
-        lr_scheduler_type = lr_scheduler_type,
-        report_to = "none"
-        )
-
-        max_seq_len = 512
-
-        trainer = SFTTrainer(
-            model = model,
-            train_dataset=dataset,
-            peft_config=peft_config,
-            dataset_text_field="prompt",
-            max_seq_length=max_seq_len,
-            tokenizer=toknizer,
-            args = training_arguments,
-        )
-
-        trainer.train()
-
-        # Save model 
-        trainer.model.save_pretrained("final_ckpt")
-        toknizer.save_pretrained("final_ckpt")
-
-        # Flush memory
-        del trainer, model
-        gc.collect()
-
-        base_model = AutoModelForCausalLM.from_pretrained(base_model_name_or_path,
-                                                          return_dict=True,
-                                                          quantization_config=bnb_config,
-                                                          torch_dtype = torch.float16,
-                                                          device_map = self.device
-                                                          )
-        
-        tokenizer = AutoTokenizer.from_pretrained(base_model_name_or_path)
-
-        model = PeftModel.from_pretrained(base_model,"final_ckpt")
-        model.push_to_hub(self.model_path)
-        tokenizer.push_to_hub(self.model_path)
-
-        # Flush Memory
-        del model, base_model
-        gc.collect()
-
-    def load_data(self):
-        naruto_transcript_df = pd.read_csv(self.data_path)
-        naruto_transcript_df = naruto_transcript_df.dropna()
-        naruto_transcript_df['line'] = naruto_transcript_df['line'].apply(remove_paranthesis)
-        naruto_transcript_df['number_of_words'] = naruto_transcript_df['line'].str.strip().str.split(" ")
-        naruto_transcript_df['number_of_words'] = naruto_transcript_df['number_of_words'].apply(lambda x: len(x))
-        naruto_transcript_df['naruto_response_flag'] = 0
-        naruto_transcript_df.loc[(naruto_transcript_df['name']=="Naruto")&(naruto_transcript_df['number_of_words']>5),'naruto_response_flag']=1
-
-        indexes_to_take = list(naruto_transcript_df[(naruto_transcript_df['naruto_response_flag']==1)&(naruto_transcript_df.index>0)].index)
-
-        system_promt = """" Your are Naruto from the anime "Naruto". Your responses should reflect his personality and speech patterns \n"""
-        prompts = []
-        for ind in indexes_to_take:
-            prompt = system_promt
-
-            prompt += naruto_transcript_df.iloc[ind -1]['line']
-            prompt += '\n'
-            prompt += naruto_transcript_df.iloc[ind]['line']
-            prompts.append(prompt)
-        
-        df = pd.DataFrame({"prompt":prompts})
-        dataset = Dataset.from_pandas(df)
-
-        return dataset
-
-
-        
+        return self._clean_output(raw_text)

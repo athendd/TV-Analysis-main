@@ -96,12 +96,12 @@ hunter_x_hunter_arcs_episodes = {
 
 if __name__ == '__main__':
     arc_keys = list(hunter_x_hunter_arcs_episodes.keys())
-    base_folder_path = 'C:/Users/thynnea/Downloads/Personal Projects/TV-Analysis-main/Data/HunterxHunterSubtitles'
+    base_folder_path = 'Data/HunterxHunterSubtitles'
     
-    for arc_key in arc_keys:
-        create_arc_folders(arc_key, base_folder_path)
+    #for arc_key in arc_keys:
+    #    create_arc_folders(arc_key, base_folder_path)
             
-    text_file_path = r'C:\Users\thynnea\Downloads\Personal Projects\TV-Analysis-main\Data\HunterxHunterSubtitles\hunterxhunterdataset copy.txt'
+    text_file_path = r'C:\Users\Andrew\Documents\GitHub\TV-Analysis-main\Data\HunterxHunterSubtitles\dataset.txt'
     
     create_episodes(text_file_path, base_folder_path)
         

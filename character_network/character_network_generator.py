@@ -51,9 +51,9 @@ class CharacterNetworkGenerator:
         html = html.replace("'", "\"")
         
         output_html = f"""<iframe style="width: 100%; height: 600px;margin:0 auto" name="result" allow="midi; geolocation; microphone; camera;
-    display-capture; encrypted-media;" sandbox="allow-modals allow-forms
-    allow-scripts allow-same-origin allow-popups
-    allow-top-navigation-by-user-activation allow-downloads" allowfullscreen=""
-    allowpaymentrequest="" frameborder="0" srcdoc='{html}'></iframe>"""
+        display-capture; encrypted-media;" sandbox="allow-modals allow-forms
+        allow-scripts allow-same-origin allow-popups
+        allow-top-navigation-by-user-activation allow-downloads" allowfullscreen=""
+        allowpaymentrequest="" frameborder="0" srcdoc='{html}'></iframe>"""
     
         return output_html

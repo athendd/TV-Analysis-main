@@ -1,41 +1,20 @@
-import json
-import os
-import tensorflow_datasets as tfds
+import logging
 import torch
 from transformers import pipeline
-from typing import List, Dict, Union
+
+logger = logging.getLogger(__name__)
 
 class QuoteAnalyzer:
     def __init__(self):
-        self.tone_model = "facebook/bart-large-mnli"  
+        self.tone_model = "facebook/bart-large-mnli"
         self.device = 0 if torch.cuda.is_available() else -1
         self.tone_labels = ["teasing", "cocky", "sincere", "protective", "sarcastic", "playful", "threatening"]
+
         self.tone_pipe = None
-        self.emotion_classifer = None
-        self.updated_quotes = []  
+        self.emotion_classifier = None
 
-    def process_file(self, file_path):
-        data = self._load_data(file_path)
-        if data:
-            quotes = data.get("Quotes", [])
-
-            if quotes and isinstance(quotes, list):
-                quotes = self.clean_quotes(quotes)
-                self.updated_quotes = self._classify_tones_and_emotions(quotes)
-                data['Quotes'] = self.updated_quotes
-                self._update_data(file_path, data)
-
-    def setup_tone_model(self):
-        self.tone_pipe = pipeline(
-            "zero-shot-classification",
-            model=self.tone_model,
-            device=self.device
-        )
-        
-    def setup_emotion_model(self):
-        self.emotion_classifer = pipeline(task="text-classification", model="SamLowe/roberta-base-go_emotions", top_k=1)
-
-    def _classify_tones_and_emotions(self, quotes):
+    def process_quotes(self, quotes):
+        """quotes: list[str] or list[{'Quote': str}]"""
         texts = []
         for q in quotes:
             if isinstance(q, dict):
@@ -43,72 +22,62 @@ class QuoteAnalyzer:
             else:
                 texts.append(str(q).strip())
 
-        texts = [t for t in texts if t]  
+        texts = [t for t in texts if t]
         if not texts:
             return []
 
         tone_results = self._classify_tones(texts)
-        emotion_results = self._classify_emotions(texts)
-                
+        emotion_labels = self._classify_emotions(texts)
+
         out = []
         for i in range(len(texts)):
             out.append({
                 "Quote": texts[i],
-                "Emotion": emotion_results[i],
-                "Tone": tone_results[i]["labels"][0],
+                "Emotion": emotion_labels[i],
+                "Tone": tone_results[i]["labels"][0]
             })
-            
-        print(out)
-            
         return out
-    
+
+    def setup_tone_model(self):
+        if self.tone_pipe is None:
+            logger.info("Loading tone model: %s", self.tone_model)
+            self.tone_pipe = pipeline(
+                "zero-shot-classification",
+                model=self.tone_model,
+                device=self.device
+            )
+
+    def setup_emotion_model(self):
+        if self.emotion_classifier is None:
+            model_id = "SamLowe/roberta-base-go_emotions"
+            logger.info("Loading emotion model: %s", model_id)
+            self.emotion_classifier = pipeline(
+                task="text-classification",
+                model=model_id,
+                top_k=1,
+                device=self.device
+            )
+
     def _classify_tones(self, texts):
         self.setup_tone_model()
         results = self.tone_pipe(
             texts,
             candidate_labels=self.tone_labels,
             hypothesis_template="The speaker's tone is {}.",
-            multi_label=False
+            multi_label=False,
+            truncation=True,
+            batch_size=16,
         )
-        
         if isinstance(results, dict):
             results = [results]
-            
+
         return results
-    
+
     def _classify_emotions(self, texts):
         self.setup_emotion_model()
-        emotions = []
-        for text in texts:
-            emotions.append(self.emotion_classifer(text)[0][0]['label'])
-        
-        return emotions        
+        output = self.emotion_classifier(texts, top_k=1, truncation=True, batch_size=32)
+        labels = []
+        for item in output:
+            labels.append(item[0]["label"])
 
-    def _load_data(self, file_path):
-        if os.path.exists(file_path):
-            with open(file_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-            
-        return None
-    
-    def _update_data(self, file_path, data):
-        with open(file_path, 'w') as file:
-            json.dump(data, file, indent=4)
-
-    def get_emotions_data(self):
-        ds, _ = tfds.load('goemotions', split=['train', 'test', 'validation'], with_info=True)
-        
-        return ds[0], ds[1], ds[2]
-    
-    @staticmethod
-    def clean_quotes(quotes):
-        fixed_quotes = []
-        for quote in quotes:
-            fixed_quotes.append(quote.replace('\"', ''))
-            
-        return fixed_quotes
-
-qa = QuoteAnalyzer()
-qa.process_file(r'Data\Character_Data_for_Chatbot\Hisoka_Morow')
-
-
+        return labels

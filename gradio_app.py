@@ -8,6 +8,9 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
+BOTS = {}
+
+
 SUBTITLE_PATHS = {
     'Entire Series': r'Data\HunterxHunterSubtitles',
     'Hunter Exam Arc': r'Data\HunterxHunterSubtitles\Hunter Exam Arc',
@@ -18,6 +21,8 @@ SUBTITLE_PATHS = {
     'Chimera Ant Arc': r'Data\HunterxHunterSubtitles\Chimera Ant Arc',
     '13th Hunter Chairman Election Arc': r'Data\HunterxHunterSubtitles\13th Hunter Chairman Election Arc',
 }
+
+CHARACTER_OPTIONS = ['Kurapika', 'Killua Zoldyck', 'Gon Freecss']
 
 SUMMARIZER_OPTIONS = {
      'Concise Summary of Episode':(
@@ -100,13 +105,23 @@ def classify_text(text_classification_model, text_classification_data_path, text
     
     return output
 
-def chat_with_character_chatbot(message, history):
-    character_chatbot = CharacterChatBot('athynne/Naruto_Llama-3-8B', huggingface_token = os.getenv('huggingface_token'))
-    
-    output = character_chatbot.chat(message, history)
-    output = output['content'].strip()
-    
-    return output
+def _get_bot(character_name):
+    if character_name not in BOTS:
+        BOTS[character_name] = CharacterChatBot(
+            character_name=character_name,
+            vector_store_dir=r"Data\vector_stores\vector_store_one",  
+            model_name="mistralai/Mistral-7B-Instruct-v0.3",
+        )
+
+    return BOTS[character_name]
+
+def chat_with_character_chatbot(message, history, character_name):
+    if not character_name:
+        return "Please select a character before chatting."
+    bot = _get_bot(character_name)
+
+    return bot.respond(message, history)
+
 
 def main():
     with gr.Blocks() as iface:
@@ -173,11 +188,41 @@ def main():
                         get_network_graph_button = gr.Button("Get Character Network")
                         get_network_graph_button.click(get_character_network, inputs = [cna_dropdown_menu, ner_path], outputs = [network_html])
                         
-        #Character chatbot section
+        # Character chatbot section
         with gr.Row():
             with gr.Column():
                 gr.HTML('<h1>Character Chatbot</h1>')
-                gr.ChatInterface(chat_with_character_chatbot)
+
+                character_dropdown_menu = gr.Dropdown(
+                    choices=CHARACTER_OPTIONS,
+                    label="Choose a character",
+                    allow_custom_value=False,
+                    filterable=False,
+                    value=None,
+                    info="Pick a character to enable chat."
+                )
+
+                character_state = gr.State(value=None)
+
+                # wrap ChatInterface in a Column so we can toggle visibility
+                with gr.Column(visible=False) as chat_container:
+                    chat_ui = gr.ChatInterface(
+                        fn=chat_with_character_chatbot,
+                        additional_inputs=[character_state],
+                        title="Hunter × Hunter Character Chat"
+                        # <-- removed examples to avoid the shape error
+                    )
+
+                def on_character_selected(selected_name):
+                    make_visible = bool(selected_name)
+                    return gr.update(visible=make_visible), selected_name
+
+                character_dropdown_menu.change(
+                    fn=on_character_selected,
+                    inputs=[character_dropdown_menu],
+                    outputs=[chat_container, character_state]
+                )
+
                             
     iface.launch(share = True)
                 
