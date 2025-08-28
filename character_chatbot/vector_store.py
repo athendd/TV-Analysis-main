@@ -1,6 +1,5 @@
 import os
 import json
-from typing import List, Dict, Optional
 from pathlib import Path
 from .util_methods import load_dict
 
@@ -11,38 +10,6 @@ from langchain.retrievers import EnsembleRetriever
 
 from .embedder import Embedder
 from .character_data_retriever import CharacterRetriever, SECTION_PROFILE
-
-
-"""
-Wraps Embedder class to match LangChain's embeddings interace so 
-FAISS can get LangChain comptatible embeddings 
-"""
-class _LangChainEmbeddingsAdapter:
-
-    def __init__(self, embedder: Embedder):
-        self._embedder = embedder
-
-    """
-    Embedds the given query 
-
-    Args:
-        -text (str): Given piece of text to embed
-    Returns:
-        -(list): A list of floats that represent the embedding
-    """
-    def embed_query(self, text):
-        return self._embedder.embed_query(text)
-
-    """
-    Embedds the given documents
-
-    Args:
-        -text (str): Given piece of text to embed
-    Returns:
-        -(list): A list of floats that represent the embedding
-    """
-    def embed_documents(self, texts):
-        return self._embedder.embed_documents(texts)
 
 """
 Represents a vector store containing data on characters from HunterxHunter.
@@ -109,11 +76,7 @@ class VectorStore:
         self.vector_store.save_local(self.vector_store_path)
 
     def load_vector_store(self):
-        self.vector_store = FAISS.load_local(
-            self.vector_store_path,
-            self._lc_embeddings,
-            allow_dangerous_deserialization=True
-        )
+        self.vector_store = FAISS.load_local(self.vector_store_path,self._lc_embeddings,allow_dangerous_deserialization = True)
         docs = []
         try:
             self.profile_map = load_dict(os.path.join(self.vector_store_path, 'profile_map'))
@@ -122,11 +85,9 @@ class VectorStore:
             
             ds = getattr(self.vector_store, 'docstore', None)
             if ds is not None:
-                # LangChain's InMemoryDocstore keeps items in a _dict
                 if hasattr(ds, '_dict') and isinstance(ds._dict, dict):
                     docs = [v for v in ds._dict.values() if isinstance(v, Document)]
                 else:
-                    # Fallback path: use index_to_docstore_id mapping
                     ids = []
                     if hasattr(self.vector_store, 'index_to_docstore_id'):
                         ids = list(self.vector_store.index_to_docstore_id.values())
@@ -136,7 +97,6 @@ class VectorStore:
         except Exception as e:
             print(f'[VectorStore] Warning: could not rebuild docs from FAISS docstore: {e}')
 
-        # If we recovered any docs, keep them for BM25; otherwise disable BM25
         if docs:
             self.documents = docs
             self.bm25_retriever = BM25Retriever.from_documents(self.documents)
@@ -144,93 +104,66 @@ class VectorStore:
             print('[VectorStore] No documents available; disabling BM25 retriever.')
             self.bm25_retriever = None
 
-    def perform_search(self, query: str, character_name: Optional[str], k: int = 10) -> List[Document]:
+    def perform_search(self, query, character_name, k = 10):
         if not query or not isinstance(query, str):
             raise ValueError('Query must be a non-empty string.')
         if self.vector_store is None or self.bm25_retriever is None:
             raise RuntimeError('Vector store not initialized.')
 
-        # FAISS with metadata filter (tight)
         faiss_retriever = self.vector_store.as_retriever(
-            search_kwargs={'k': k},
+            search_kwargs = {'k': k},
             filter={'name': character_name} if character_name else None,
         )
 
-        # BM25 (broad) — increase recall
         self.bm25_retriever.k = max(k * 3, 10)
 
-        # Fuse BM25 + FAISS
-        ensemble = EnsembleRetriever(
-            retrievers=[self.bm25_retriever, faiss_retriever],
-            weights=[0.4, 0.6],
-            search_kwargs={'k': max(k * 3, 10)},  
-        )
+        ensemble = EnsembleRetriever(retrievers = [self.bm25_retriever, faiss_retriever], weights = [0.4, 0.6], search_kwargs = {'k': max(k * 3, 10)})
 
         docs = ensemble.get_relevant_documents(query)
 
-        # Post-filter by character name, but backfill to keep k
         if character_name:
-            filtered = [d for d in docs if d.metadata.get("name") == character_name]
+            filtered = [d for d in docs if d.metadata.get('name') == character_name]
             if len(filtered) < k:
                 need = k - len(filtered)
                 spill = [d for d in docs if d not in filtered][:need]
                 filtered.extend(spill)
+
             return filtered[:k]
 
         return docs[:k]
 
-    # ---------- Profiles ----------
-
-    def get_profile(self, character_name: str) -> Dict[str, str]:
-        """
-        O(1) lookup using profile_map; falls back to a tiny scoped FAISS search.
-        """
+    def get_profile(self, character_name):
         if not character_name:
             return {}
+        
         if character_name in self.profile_map:
             return self.profile_map[character_name]
 
         if self.vector_store is None:
             return {}
-        hits = self.vector_store.similarity_search(
-            query="profile persona voice",
-            k=1,
-            filter={"name": character_name, "section": SECTION_PROFILE},
-        )
+        
+        hits = self.vector_store.similarity_search(query = 'profile persona voice', k = 1, filter = {'name': character_name, 'section': SECTION_PROFILE})
         if hits:
-            # If desired, parse hits[0].page_content to split persona vs voice.
-            return {"persona_card": hits[0].page_content, "voice_cues": ""}
+            return {'persona_card': hits[0].page_content, 'voice_cues': ''}
+        
         return {}
     
     def save_profile_map(self):
-        os.makedirs(self.vector_store_path, exist_ok=True)
+        os.makedirs(self.vector_store_path, exist_ok = True)
         full_file_path = os.path.join(self.vector_store_path, 'profile_map')
         try:
             with open(full_file_path, 'w') as f:
                 json.dump(self.profile_map, f, indent=4)
-            print(f"Dictionary successfully saved to {full_file_path}")
+            print(f'Dictionary successfully saved to {full_file_path}')
+
         except IOError as e:
-            print(f"Error saving file: {e}")
+            print(f'Error saving file: {e}')
 
 if __name__ == '__main__':
-    # Build docs from your character JSONs
     character_retriever = CharacterRetriever(r'Data\Character_Data_for_Chatbot')
     documents = character_retriever.create_character_documents()
     profile_map = character_retriever.build_profile_map()
 
-    # Your Embedder (from your snippet)
     embedder = Embedder()
 
-    # Create or load the store
-    vector_store = VectorStore(
-        embedder=embedder,
-        documents=documents,  # also used to build BM25
-        vector_store_path=r'Data\vector_stores\vector_store_one',
-        profile_map=profile_map,
-    )
-
-    # quick checks
-    print("Profile (example):", vector_store.get_profile("Gon"))
-    results = vector_store.perform_search("Jajanken and Enhancement", "Gon", k=5)
-    for r in results:
-        print(r.metadata, "=>", r.page_content[:120], "…")
+    vector_store = VectorStore(embedder = embedder, documents = documents, vector_store_path = r'Data\vector_stores\vector_store_one', profile_map = profile_map)
