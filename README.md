@@ -13,7 +13,8 @@ This project combines **zero-shot classifiers, custom multi-label models, knowle
   - **Entire Series**: classify themes across all subtitles.  
   - **Arc-Specific**: classify themes in arcs like *Chimera Ant* or *Yorknew City*.  
 - Outputs aggregated counts visualized in bar plots for fast comparison.  
-- Example: *Chimera Ant Arc* → dominant themes of “sacrifice” and “despair.”  
+- Example: *Greed Island Arc* →   
+<img width="3752" height="982" alt="Greed Island Themes" src="https://github.com/user-attachments/assets/357c9fc8-fb9b-4207-83ae-8bdd564cd3de" />
 
 ---
 
@@ -24,17 +25,20 @@ This project combines **zero-shot classifiers, custom multi-label models, knowle
   - Edges = frequency of appearing together  
 - Supports **arc-level** and **full-series** views.  
 - Outputs **interactive HTML network graphs**.  
-- Example: Kurapika’s network shifts from Leorio/Gon to Phantom Troupe in *Yorknew City Arc*.  
+- Example: *Zoldyck Family Arc*.  
+<img width="3680" height="1610" alt="Zoldyck Family Arc Network" src="https://github.com/user-attachments/assets/89687a84-63e6-4765-82cf-0568d8592312" />
 
 ---
 
 ### 3. Nen Classifier (Custom Multi-Label Model)  
 - Custom **MultiLabelClassifier** that assigns one or more Nen types:  
   - Enhancement, Conjuration, Manipulation, Emission, Transmutation, Specialization.  
-- Supports **hybrid abilities** (e.g., Kurapika’s *Holy Chain* → Enhancement + Conjuration).  
+- Supports **hybrid abilities** (e.g., Kurapika’s *Holy Chain* → Enhancement + Conjuration).
+- Performed **word level text augmentation** on nen abilities through **synonym replacement** to create enough data to train the classifier
 - Input: free-text ability description.  
 - Output: probability distribution → predicted Nen types.  
-- Example: Gon’s *Scissors* → correctly classified as **Transmutation**.  
+- Example: Gon’s *Scissors* →   
+<img width="3702" height="1137" alt="Scissors Classification" src="https://github.com/user-attachments/assets/59446150-0a4d-4062-8720-d4a11d793450" />
 
 ---
 
@@ -43,7 +47,8 @@ This project combines **zero-shot classifiers, custom multi-label models, knowle
 - Takes subtitle text and produces:  
   1. **Concise Summary**: one polished paragraph.  
   2. **Bullet List of Events**: chronological step-by-step list.  
-- Example: Episode 116 → bullet list highlights Killua saving Gon, Gon confronting Neferpitou, Komugi’s state.  
+- Example: Episode 74 →
+<img width="3700" height="1085" alt="Concise Episode Summary" src="https://github.com/user-attachments/assets/26c2791c-b85b-48e1-acd1-67140e0b00d6" />
 
 ---
 
@@ -59,14 +64,38 @@ This project combines **zero-shot classifiers, custom multi-label models, knowle
   - Persona card: character traits, motivations.  
   - Voice cues: cadence, vocabulary, tone, formality.  
   - Responses always sound “in-character.”  
-- Example: Asking Gon *“What’s your dream?”* →  
-  *“Hey there! I’ve always wanted to become a Hunter, just like my dad, Ging. It’s all about exploring the world, facing challenges, and growing stronger. That’s my dream, to keep on pushin’ forward!”*  
+- Example: Asking Gon *“Who is your closest friend?”* →  
+<img width="1535" height="1307" alt="Gon's Best Friend" src="https://github.com/user-attachments/assets/f67f4131-7e6f-435c-86ce-8e12f09ce874" />
 
 ---
 
-## 🛠️ Installation  
+## Installation
 
-Clone the repo:  
+Clone the repo:
 ```bash
-git clone https://github.com/yourusername/hxh-ai-chatbot.git
-cd hxh-ai-chatbot
+git clone https://github.com/yourusername/TV-Analysis-main.git
+```
+
+## Steps to Run Program
+
+1. Install the requirements
+```bash
+pip install -r requirements.txt
+```
+2. Setup Huggingface token as environment variable for access to Huggingface
+```bash
+touch .env
+echo "huggingface_token=your_hf_token_here" >> .env
+```
+3. Run gradio.py
+
+---
+
+## Tech Stack
+
+**LLMs**: Mistral-7B-Instruct
+**Embeddings**: BAAI/bge-small-en-1.5
+**Vector Store**: FAISS (dense retrieval) + BM25 (sparse retrieval)
+**Interface**: Gradio
+**NER**: spaCy + custom pipelines
+**Classification**: Huggingface Transformers
